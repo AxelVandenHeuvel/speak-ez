@@ -18,12 +18,18 @@ No account, no subscription, no telemetry, and nothing is ever uploaded.
 ## Install
 
 ```sh
+brew install --cask axelvandenheuvel/tap/speakez
+```
+
+That installs a signed and notarized build.
+If you would rather compile it yourself:
+
+```sh
 curl -fsSL https://raw.githubusercontent.com/AxelVandenHeuvel/speak-ez/main/install.sh | sh
 ```
 
-That builds it from source (about 2 minutes) and puts speakEZ.app in /Applications.
-You need the Xcode Command Line Tools; the script offers to install them if they are missing.
-Building locally means there is no Gatekeeper warning and no prebuilt binary you have to trust.
+The script builds from source (about 2 minutes, needs the Xcode Command Line Tools and offers to install them) and puts speakEZ.app in /Applications.
+No Gatekeeper warnings either way; the source route just means you are not trusting a prebuilt binary.
 
 On first launch you grant three permissions (Microphone, Input Monitoring, Accessibility), hit "Relaunch speakEZ" in the menu so macOS applies them, and let the speech model download once (~1 GB).
 
