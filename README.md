@@ -6,11 +6,10 @@ Clean text shows up wherever your cursor is.
 The point of this app is the cleanup, not just the transcription.
 Here is what that looks like:
 
-> what you said:
-> *"um so i uh think we should of tested the the deploy script before we pushes it you know"*
->
-> what gets typed:
-> *"So I think we should have tested the deploy script before we push it."*
+![Dictating the same sentence with refinement off, then on](Assets/demo.gif)
+
+The first line is refinement turned off: exactly what was said, ums included.
+The second line is the same sentence dictated again with refinement on.
 
 Everything runs on your Mac.
 No account, no subscription, no telemetry, and nothing is ever uploaded.
