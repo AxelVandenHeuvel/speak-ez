@@ -20,10 +20,59 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             .flatMap { NSFont(descriptor: $0, size: 14) } ?? base
         let text = NSAttributedString(
             string: "ez", attributes: [.font: font, .foregroundColor: NSColor.black])
-        let textSize = text.size()
-        let image = NSImage(size: NSSize(width: ceil(textSize.width), height: 16))
+
+        // Font metric APIs and draw(at:) coordinate conventions disagree
+        // about where glyphs actually land, so measure empirically: render
+        // once offscreen, find the ink bounds in the bitmap, then draw again
+        // with the ink mathematically centered.
+        let probeOrigin = NSPoint(x: 20, y: 20)
+        let probe = NSImage(size: NSSize(width: 80, height: 60))
+        probe.lockFocus()
+        text.draw(at: probeOrigin)
+        probe.unlockFocus()
+
+        var ink = NSRect.zero
+        if let tiff = probe.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) {
+            let scaleX = CGFloat(rep.pixelsWide) / probe.size.width
+            let scaleY = CGFloat(rep.pixelsHigh) / probe.size.height
+            var minX = rep.pixelsWide, maxX = -1, minY = rep.pixelsHigh, maxY = -1
+            for py in 0..<rep.pixelsHigh {
+                for px in 0..<rep.pixelsWide
+                where (rep.colorAt(x: px, y: py)?.alphaComponent ?? 0) > 0.1 {
+                    minX = min(minX, px)
+                    maxX = max(maxX, px)
+                    minY = min(minY, py)
+                    maxY = max(maxY, py)
+                }
+            }
+            if maxX >= minX {
+                // Bitmap rows are top-down; flip Y back to view coordinates.
+                ink = NSRect(
+                    x: CGFloat(minX) / scaleX,
+                    y: probe.size.height - CGFloat(maxY + 1) / scaleY,
+                    width: CGFloat(maxX - minX + 1) / scaleX,
+                    height: CGFloat(maxY - minY + 1) / scaleY)
+            }
+        }
+        guard ink.width > 0 else {
+            // Measurement failed somehow; fall back to naive centering.
+            let size = text.size()
+            let fallback = NSImage(size: NSSize(width: ceil(size.width), height: 16))
+            fallback.lockFocus()
+            text.draw(at: NSPoint(x: 0, y: (16 - size.height) / 2))
+            fallback.unlockFocus()
+            fallback.isTemplate = true
+            return fallback
+        }
+
+        let height: CGFloat = 16
+        let width = ceil(ink.width) + 2
+        let image = NSImage(size: NSSize(width: width, height: height))
         image.lockFocus()
-        text.draw(at: NSPoint(x: 0, y: (16 - textSize.height) / 2))
+        text.draw(
+            at: NSPoint(
+                x: probeOrigin.x - ink.minX + (width - ink.width) / 2,
+                y: probeOrigin.y - ink.minY + (height - ink.height) / 2))
         image.unlockFocus()
         image.isTemplate = true
         return image
