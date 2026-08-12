@@ -246,7 +246,10 @@ final class DictationController {
     /// Shows a prompt and reports the next key the user presses.
     /// The completion receives nil if the user cancelled with Esc.
     func captureTrigger(completion: @escaping (TriggerSpec?) -> Void) {
-        overlay.show(.prompt("Press a key or combination to use as the trigger. Esc cancels."))
+        overlay.show(
+            .prompt(
+                "Press one key, or a two-key combo (like ⌃S), to use as the trigger. Esc cancels."
+            ))
         hotkey.captureHandler = { [weak self] spec in
             self?.overlay.hide()
             completion(spec)

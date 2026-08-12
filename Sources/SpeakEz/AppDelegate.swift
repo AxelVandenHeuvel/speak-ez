@@ -11,16 +11,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var modelStatus: TranscriptionService.Status = .notLoaded
     private var hotkeyRetryTimer: Timer?
 
+    /// The idle menu-bar glyph: a little "ez", drawn as a template image so
+    /// it follows the menu bar's light/dark appearance.
+    private static let ezIcon: NSImage = {
+        let base = NSFont.systemFont(ofSize: 14, weight: .heavy)
+        let font =
+            base.fontDescriptor.withDesign(.rounded)
+            .flatMap { NSFont(descriptor: $0, size: 14) } ?? base
+        let text = NSAttributedString(
+            string: "ez", attributes: [.font: font, .foregroundColor: NSColor.black])
+        let textSize = text.size()
+        let image = NSImage(size: NSSize(width: ceil(textSize.width), height: 16))
+        image.lockFocus()
+        text.draw(at: NSPoint(x: 0, y: (16 - textSize.height) / 2))
+        image.unlockFocus()
+        image.isTemplate = true
+        return image
+    }()
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        setIcon("waveform")
+        setIdleIcon()
         let menu = NSMenu()
         menu.delegate = self
         statusItem.menu = menu
 
         controller.onStateChange = { [weak self] state in
             switch state {
-            case .idle: self?.setIcon("waveform")
+            case .idle: self?.setIdleIcon()
             case .recording: self?.setIcon("record.circle.fill")
             case .processing: self?.setIcon("ellipsis.circle")
             case .inserting: self?.setIcon("text.cursor")
@@ -64,11 +82,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     if self.controller.startHotkey() {
                         self.hotkeyRetryTimer?.invalidate()
                         self.hotkeyRetryTimer = nil
-                        self.setIcon("waveform")
+                        self.setIdleIcon()
                     }
                 }
             }
         }
+    }
+
+    private func setIdleIcon() {
+        statusItem.button?.image = Self.ezIcon
     }
 
     private func setIcon(_ symbolName: String) {

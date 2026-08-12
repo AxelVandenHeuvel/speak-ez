@@ -44,7 +44,8 @@ final class RecordingOverlayPanel {
         panel.ignoresMouseEvents = true
         panel.hidesOnDeactivate = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        hostingView = NSHostingView(rootView: OverlayView(model: model))
+        hostingView = NSHostingView(
+            rootView: OverlayView(phase: .hidden, hint: nil, model: model))
         panel.contentView = hostingView
     }
 
@@ -55,9 +56,12 @@ final class RecordingOverlayPanel {
         panel.orderFrontRegardless()
     }
 
-    /// Resizes the panel to fit its content. Call after changing what the
-    /// overlay displays (phase or hint), so nothing ever gets clipped.
+    /// Resizes the panel to fit its content. The phase and hint are passed
+    /// into the view directly (not read through the observable model) so the
+    /// measurement below sees the new content synchronously; otherwise the
+    /// panel gets sized against the previous state and clips or hides text.
     func refreshLayout() {
+        hostingView.rootView = OverlayView(phase: model.phase, hint: model.hint, model: model)
         var size = hostingView.fittingSize
         size.width = max(size.width, 60)
         size.height = max(size.height, 44)
@@ -87,18 +91,22 @@ final class RecordingOverlayPanel {
 }
 
 struct OverlayView: View {
+    let phase: OverlayPhase
+    let hint: String?
+    /// Only the live mic level is read through the model; it animates
+    /// without affecting layout.
     let model: OverlayModel
 
     var body: some View {
         HStack(spacing: 10) {
-            switch model.phase {
+            switch phase {
             case .hidden:
                 EmptyView()
             case .recording:
                 Image(systemName: "mic.fill")
                     .foregroundStyle(.red)
                 LevelBars(level: model.level)
-                if let hint = model.hint {
+                if let hint {
                     Text(hint)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -126,7 +134,7 @@ struct OverlayView: View {
         .padding(.vertical, 10)
         .background(.regularMaterial, in: Capsule())
         .padding(4)
-        .opacity(model.phase == .hidden ? 0 : 1)
+        .opacity(phase == .hidden ? 0 : 1)
     }
 }
 
