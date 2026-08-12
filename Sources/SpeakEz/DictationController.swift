@@ -76,6 +76,7 @@ final class DictationController {
             // to end it.
             if action == .none, machine.state == .recording {
                 overlay.model.hint = "Tap \(settings.trigger.displayName) to stop"
+                overlay.refreshLayout()
             }
         }
         hotkey.onEscape = { [weak self] in

@@ -27,11 +27,12 @@ final class OverlayModel {
 @MainActor
 final class RecordingOverlayPanel {
     private let panel: NSPanel
+    private let hostingView: NSHostingView<OverlayView>
     let model = OverlayModel()
 
     init() {
         panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 380, height: 44),
+            contentRect: NSRect(x: 0, y: 0, width: 200, height: 44),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: true
@@ -43,14 +44,25 @@ final class RecordingOverlayPanel {
         panel.ignoresMouseEvents = true
         panel.hidesOnDeactivate = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        panel.contentView = NSHostingView(rootView: OverlayView(model: model))
+        hostingView = NSHostingView(rootView: OverlayView(model: model))
+        panel.contentView = hostingView
     }
 
     func show(_ phase: OverlayPhase) {
         model.phase = phase
         model.hint = nil
-        position()
+        refreshLayout()
         panel.orderFrontRegardless()
+    }
+
+    /// Resizes the panel to fit its content. Call after changing what the
+    /// overlay displays (phase or hint), so nothing ever gets clipped.
+    func refreshLayout() {
+        var size = hostingView.fittingSize
+        size.width = max(size.width, 60)
+        size.height = max(size.height, 44)
+        panel.setContentSize(size)
+        position()
     }
 
     func hide() {
@@ -113,7 +125,7 @@ struct OverlayView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
         .background(.regularMaterial, in: Capsule())
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(4)
         .opacity(model.phase == .hidden ? 0 : 1)
     }
 }
@@ -132,6 +144,8 @@ struct LevelBars: View {
             }
         }
         .animation(.easeOut(duration: 0.1), value: level)
+        // Fixed footprint so the capsule never resizes with the voice level.
+        .frame(width: 27, height: 22)
     }
 
     private func barHeight(_ index: Int) -> CGFloat {
