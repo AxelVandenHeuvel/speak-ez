@@ -54,59 +54,23 @@ actor TranscriptionService {
 
     /// Transcribes a full recording in one shot. Segments may have different
     /// sample rates; each is resampled to 16 kHz and concatenated.
+    /// FluidAudio handles long recordings internally with overlapping
+    /// windows, so no chunking happens on our side: hand-rolled chunking
+    /// split words at the seams and mangled the transcript.
     func transcribe(_ segments: [AudioSegment]) async throws -> String {
         guard let manager else {
             throw TranscriptionError.modelsNotReady
         }
-        let samples16k = try resampled(segments)
+        var samples16k = try resampled(segments)
         guard !samples16k.isEmpty else { return "" }
+
+        // Half a second of trailing silence: without right context the
+        // decoder tends to swallow the final word.
+        samples16k.append(contentsOf: [Float](repeating: 0, count: 8000))
 
         var state = TdtDecoderState.make()
         let result = try await manager.transcribe(samples16k, decoderState: &state)
         return result.text.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    // MARK: - Chunked session (long recordings)
-
-    // For long holds, audio is transcribed in the background every few
-    // seconds while the user is still speaking. The TDT decoder state is
-    // carried across chunks so the transcription stays continuous, and chunk
-    // boundaries are cut at quiet points by the recorder. On release only
-    // the small tail chunk is left to transcribe, so even a 5-minute
-    // recording inserts in about a second.
-
-    private var chunkDecoderState: TdtDecoderState?
-    private var chunkTexts: [String] = []
-
-    var hasActiveChunkSession: Bool { chunkDecoderState != nil }
-
-    func beginChunkedSession() {
-        chunkDecoderState = TdtDecoderState.make()
-        chunkTexts = []
-    }
-
-    func feedChunk(_ segments: [AudioSegment]) async throws {
-        guard let manager, chunkDecoderState != nil else { return }
-        let samples16k = try resampled(segments)
-        guard !samples16k.isEmpty else { return }
-        var state = chunkDecoderState!
-        let result = try await manager.transcribe(samples16k, decoderState: &state)
-        chunkDecoderState = state
-        let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !text.isEmpty {
-            chunkTexts.append(text)
-        }
-    }
-
-    func finishChunkedSession(tail: [AudioSegment]) async throws -> String {
-        defer { abandonChunkedSession() }
-        try await feedChunk(tail)
-        return chunkTexts.joined(separator: " ")
-    }
-
-    func abandonChunkedSession() {
-        chunkDecoderState = nil
-        chunkTexts = []
     }
 
     private func resampled(_ segments: [AudioSegment]) throws -> [Float] {

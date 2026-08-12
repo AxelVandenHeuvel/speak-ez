@@ -27,17 +27,13 @@ final class DictationController {
     private var recordingStartedAt: Date?
 
     private var maxDurationTimer: Timer?
-    private var chunkTimer: Timer?
     private var pipelineTask: Task<Void, Never>?
     private var pendingTranscript: String = ""
     private var modelReady = false
 
-    /// Serializes chunked-session operations so chunks always reach the
-    /// transcriber in recording order.
-    private var chunkChain: Task<Void, Never>?
-
-    /// How often mid-recording audio is handed to the transcriber.
-    private static let chunkInterval: TimeInterval = 10
+    /// Capture continues this long after release, because people let go of
+    /// the key on the last syllable and clip their own final word.
+    private static let releaseGrace: Duration = .milliseconds(250)
 
     /// Sets up everything except the keyboard tap. Call once at launch.
     func start() {
@@ -59,6 +55,15 @@ final class DictationController {
             // Light smoothing so the meter does not flicker.
             let smoothed = self.overlay.model.level * 0.6 + level * 0.4
             self.overlay.model.level = smoothed
+        }
+
+        recorder.onFailure = { [weak self] _ in
+            guard let self, machine.state == .recording else { return }
+            // The mic died mid-recording and could not be revived. Keep what
+            // was captured instead of throwing the user's words away: this
+            // behaves exactly like the recording ending at that moment.
+            NSLog("DictationController: mic died mid-recording, transcribing what we have")
+            self.handle(.maxDurationReached)
         }
 
         hotkey.onTriggerDown = { [weak self] in
@@ -129,12 +134,6 @@ final class DictationController {
                 recordingStartedAt = Date()
                 overlay.show(.recording)
                 startMaxDurationTimer()
-                if modelReady {
-                    enqueueChunkOperation { transcription in
-                        await transcription.beginChunkedSession()
-                    }
-                    startChunkTimer()
-                }
             } catch {
                 NSLog("DictationController: mic start failed: %@", "\(error)")
                 handle(.failed(reason: "Could not start the microphone"))
@@ -142,12 +141,27 @@ final class DictationController {
 
         case .stopRecordingThenTranscribe:
             stopMaxDurationTimer()
-            stopChunkTimer()
+            let heldSeconds = recordingStartedAt.map { -$0.timeIntervalSinceNow } ?? 0
             recordingStartedAt = nil
-            let segments = recorder.stop()
             overlay.show(.processing)
             pipelineTask = Task { [weak self] in
-                await self?.runTranscription(segments)
+                // Let the mic run a beat longer so the final word survives.
+                try? await Task.sleep(for: Self.releaseGrace)
+                guard let self else { return }
+                guard !Task.isCancelled else {
+                    self.recorder.discard()
+                    return
+                }
+                let segments = self.recorder.stop()
+                let capturedSeconds = segments.reduce(0.0) {
+                    $0 + Double($1.samples.count) / $1.sampleRate
+                }
+                // If captured audio is much shorter than the hold, capture
+                // died somewhere; this line is the tell in bug reports.
+                NSLog(
+                    "DictationController: held %.1fs, captured %.1fs in %d segment(s)",
+                    heldSeconds, capturedSeconds, segments.count)
+                await self.runTranscription(segments)
             }
 
         case .refineTranscript:
@@ -160,24 +174,19 @@ final class DictationController {
 
         case .discardRecording:
             stopMaxDurationTimer()
-            stopChunkTimer()
             recordingStartedAt = nil
             recorder.discard()
-            abandonChunkSession()
             overlay.hide()
 
         case .abortProcessing:
             pipelineTask?.cancel()
             pipelineTask = nil
-            abandonChunkSession()
             overlay.hide()
 
         case .reportError(let message):
             stopMaxDurationTimer()
-            stopChunkTimer()
             recordingStartedAt = nil
             recorder.discard()
-            abandonChunkSession()
             pipelineTask?.cancel()
             pipelineTask = nil
             flashError(message)
@@ -188,14 +197,7 @@ final class DictationController {
 
     private func runTranscription(_ segments: [AudioSegment]) async {
         do {
-            let text: String
-            // Wait for any in-flight chunk transcriptions, then decide path.
-            await chunkChain?.value
-            if await transcription.hasActiveChunkSession {
-                text = try await transcription.finishChunkedSession(tail: segments)
-            } else {
-                text = try await transcription.transcribe(segments)
-            }
+            let text = try await transcription.transcribe(segments)
             guard !Task.isCancelled, machine.state == .processing else { return }
             if text.isEmpty {
                 machine.handle(.failed(reason: ""))
@@ -287,51 +289,6 @@ final class DictationController {
             try? await Task.sleep(for: .seconds(2))
             guard let self, self.overlay.model.phase == phaseWhenScheduled else { return }
             self.overlay.hide()
-        }
-    }
-
-    // MARK: - Chunked transcription while recording
-
-    /// Appends an operation to the serial chunk chain, preserving order.
-    private func enqueueChunkOperation(
-        _ operation: @escaping @Sendable (TranscriptionService) async -> Void
-    ) {
-        let previous = chunkChain
-        let transcription = transcription!
-        chunkChain = Task {
-            await previous?.value
-            await operation(transcription)
-        }
-    }
-
-    private func startChunkTimer() {
-        chunkTimer = Timer.scheduledTimer(
-            withTimeInterval: Self.chunkInterval, repeats: true
-        ) { [weak self] _ in
-            Task { @MainActor in
-                self?.drainChunk()
-            }
-        }
-    }
-
-    private func stopChunkTimer() {
-        chunkTimer?.invalidate()
-        chunkTimer = nil
-    }
-
-    private func drainChunk() {
-        guard machine.state == .recording,
-            let segments = recorder.drainForChunking()
-        else { return }
-        enqueueChunkOperation { transcription in
-            try? await transcription.feedChunk(segments)
-        }
-    }
-
-    /// Clears any chunked session once in-flight chunk work has drained.
-    private func abandonChunkSession() {
-        enqueueChunkOperation { transcription in
-            await transcription.abandonChunkedSession()
         }
     }
 

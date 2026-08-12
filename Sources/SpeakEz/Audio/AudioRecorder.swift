@@ -23,6 +23,10 @@ final class AudioRecorder: @unchecked Sendable {
     /// Called on the main thread with a 0...1 level for the overlay meter.
     var onLevel: (@MainActor @Sendable (Float) -> Void)?
 
+    /// Called on the main thread when capture died mid-recording and could
+    /// not be revived, so the user is told instead of losing speech silently.
+    var onFailure: (@MainActor @Sendable (String) -> Void)?
+
     /// Total seconds captured so far across all segments.
     var capturedDuration: TimeInterval {
         lock.lock()
@@ -70,57 +74,6 @@ final class AudioRecorder: @unchecked Sendable {
         recording = false
         segments = []
         currentSamples = []
-    }
-
-    /// While recording, hands over everything captured so far, cut at a quiet
-    /// point so the transcriber never gets a chunk that splits a word.
-    /// Returns nil when there is not enough audio yet to bother.
-    /// The remainder after the cut stays in the buffer.
-    func drainForChunking(minimumSeconds: Double = 5) -> [AudioSegment]? {
-        lock.lock()
-        defer { lock.unlock() }
-        guard recording, currentRate > 0 else { return nil }
-        let minimumSamples = Int(minimumSeconds * currentRate)
-        guard currentSamples.count >= minimumSamples else {
-            // Still hand over sealed segments from a device switch, if any.
-            guard !segments.isEmpty else { return nil }
-            let sealed = segments
-            segments = []
-            return sealed
-        }
-
-        let cut = quietestCutIndex(in: currentSamples, sampleRate: currentRate)
-        let drained = Array(currentSamples[..<cut])
-        currentSamples = Array(currentSamples[cut...])
-        var result = segments
-        segments = []
-        result.append(AudioSegment(samples: drained, sampleRate: currentRate))
-        return result
-    }
-
-    /// Finds the quietest 25 ms window inside the last 1.5 s of the buffer
-    /// and returns its center, so chunk boundaries land in pauses, not words.
-    private func quietestCutIndex(in samples: [Float], sampleRate: Double) -> Int {
-        let searchSpan = min(Int(1.5 * sampleRate), samples.count)
-        let windowSize = max(1, Int(0.025 * sampleRate))
-        let searchStart = samples.count - searchSpan
-        var bestIndex = samples.count - windowSize
-        var bestEnergy = Float.greatestFiniteMagnitude
-
-        var index = searchStart
-        while index + windowSize <= samples.count {
-            var energy: Float = 0
-            for offset in 0..<windowSize {
-                let sample = samples[index + offset]
-                energy += sample * sample
-            }
-            if energy < bestEnergy {
-                bestEnergy = energy
-                bestIndex = index
-            }
-            index += windowSize
-        }
-        return bestIndex + windowSize / 2
     }
 
     private func installTapAndStart() throws {
@@ -194,9 +147,33 @@ final class AudioRecorder: @unchecked Sendable {
         lock.unlock()
         guard wasRecording else { return }
 
-        // The input device changed mid-recording: rebuild the tap in the new
-        // native format and keep appending as a fresh segment.
+        // The input device or its format changed mid-recording (new mic,
+        // AirPods, a screen recorder grabbing the input, ...). Rebuild the
+        // tap in the new native format and keep appending as a fresh
+        // segment. This must not fail silently: a dead engine here means
+        // every word after this moment would be lost.
+        NSLog("AudioRecorder: input configuration changed mid-recording, rebuilding tap")
         tearDownTap()
-        try? installTapAndStart()
+        var lastError: Error?
+        for attempt in 1...3 {
+            do {
+                try installTapAndStart()
+                NSLog("AudioRecorder: tap rebuilt (attempt %d)", attempt)
+                return
+            } catch {
+                lastError = error
+                NSLog("AudioRecorder: rebuild attempt %d failed: %@", attempt, "\(error)")
+                usleep(100_000)
+            }
+        }
+        lock.lock()
+        recording = false
+        lock.unlock()
+        NSLog("AudioRecorder: giving up, capture is dead: %@", "\(String(describing: lastError))")
+        if let onFailure {
+            Task { @MainActor in
+                onFailure("The microphone was interrupted")
+            }
+        }
     }
 }
