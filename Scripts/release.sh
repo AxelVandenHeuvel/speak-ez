@@ -16,7 +16,9 @@ ZIP="build/speakEZ-${VERSION}.zip"
 IDENTITY=$(security find-identity -v -p codesigning 2>/dev/null | awk -F'"' '/Developer ID Application/ {print $2; exit}')
 if [[ -n "${IDENTITY}" ]]; then
     echo "Signing with: ${IDENTITY}"
-    codesign --force --options runtime --timestamp --sign "${IDENTITY}" build/speakEZ.app
+    codesign --force --options runtime --timestamp \
+        --entitlements Resources/speakEZ.entitlements \
+        --sign "${IDENTITY}" build/speakEZ.app
 fi
 
 ditto -c -k --keepParent build/speakEZ.app "$ZIP"
