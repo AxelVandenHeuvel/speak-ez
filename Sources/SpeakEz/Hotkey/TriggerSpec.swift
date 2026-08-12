@@ -12,19 +12,37 @@ struct TriggerSpec: Codable, Equatable, Sendable {
     enum Kind: String, Codable, Sendable {
         case modifier
         case regular
+        /// One or more modifiers plus a regular key, like Control+S.
+        case chord
     }
 
     let kind: Kind
+    /// The regular key for .regular and .chord; the modifier's own key code
+    /// for .modifier.
     let keyCode: Int64
-    /// Only set for modifiers: the CGEventFlags bit that is on while held.
+    /// .modifier: the flag bit that is on while held.
+    /// .chord: the exact set of modifier flags that must be held.
     let flagMaskRaw: UInt64?
     let displayName: String
 
     var flagMask: CGEventFlags? { flagMaskRaw.map { CGEventFlags(rawValue: $0) } }
 
+    /// The modifier bits we compare; everything else (caps lock, device
+    /// bits, numeric pad) is ignored.
+    static let relevantModifierFlags: CGEventFlags = [
+        .maskCommand, .maskAlternate, .maskControl, .maskShift, .maskSecondaryFn,
+    ]
+
     func isPressed(in flags: CGEventFlags) -> Bool {
         guard let flagMask else { return false }
         return flags.contains(flagMask)
+    }
+
+    /// Chord matching: the held modifiers must be exactly the required set,
+    /// so a Cmd+Ctrl+S shortcut never triggers a Ctrl+S trigger.
+    func chordFlagsMatch(_ flags: CGEventFlags) -> Bool {
+        guard let flagMaskRaw else { return false }
+        return flags.rawValue & Self.relevantModifierFlags.rawValue == flagMaskRaw
     }
 
     // MARK: - Presets
@@ -69,10 +87,24 @@ struct TriggerSpec: Codable, Equatable, Sendable {
             kind: .modifier, keyCode: keyCode, flagMaskRaw: mask.rawValue, displayName: name)
     }
 
-    static func capturedRegularKey(keyCode: Int64) -> TriggerSpec {
-        TriggerSpec(
-            kind: .regular, keyCode: keyCode, flagMaskRaw: nil,
-            displayName: keyName(for: keyCode))
+    /// Interpret a key-down during capture: with modifiers held it becomes
+    /// a chord, without it is a plain key trigger.
+    static func capturedKeyDown(keyCode: Int64, flags: CGEventFlags) -> TriggerSpec {
+        let held = CGEventFlags(rawValue: flags.rawValue & relevantModifierFlags.rawValue)
+        guard !held.isEmpty else {
+            return TriggerSpec(
+                kind: .regular, keyCode: keyCode, flagMaskRaw: nil,
+                displayName: keyName(for: keyCode))
+        }
+        var symbols = ""
+        if held.contains(.maskSecondaryFn) { symbols += "fn " }
+        if held.contains(.maskControl) { symbols += "⌃" }
+        if held.contains(.maskAlternate) { symbols += "⌥" }
+        if held.contains(.maskShift) { symbols += "⇧" }
+        if held.contains(.maskCommand) { symbols += "⌘" }
+        return TriggerSpec(
+            kind: .chord, keyCode: keyCode, flagMaskRaw: held.rawValue,
+            displayName: "\(symbols)\(keyName(for: keyCode))")
     }
 
     /// Whether this key has no default system/typing action, making it a

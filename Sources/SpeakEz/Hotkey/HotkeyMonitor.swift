@@ -28,6 +28,10 @@ final class HotkeyMonitor {
     private var runLoopSource: CFRunLoopSource?
     private var triggerDownSince: Date?
 
+    /// During capture: the modifier most recently pressed, so releasing it
+    /// alone (without typing a key) selects it as a modifier-only trigger.
+    private var pendingCaptureModifier: TriggerSpec?
+
     private static let escapeKeyCode: Int64 = 53
 
     /// Returns false when the event tap could not be created,
@@ -118,7 +122,11 @@ final class HotkeyMonitor {
             reportTrigger(pressed: trigger.isPressed(in: event.flags))
 
         case .keyDown:
-            if trigger.kind == .regular, keyCode == trigger.keyCode {
+            let matchesTrigger =
+                keyCode == trigger.keyCode
+                && (trigger.kind == .regular
+                    || (trigger.kind == .chord && trigger.chordFlagsMatch(event.flags)))
+            if matchesTrigger {
                 let isAutorepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
                 if !isAutorepeat {
                     reportTrigger(pressed: true)
@@ -135,7 +143,9 @@ final class HotkeyMonitor {
             }
 
         case .keyUp:
-            if trigger.kind == .regular, keyCode == trigger.keyCode {
+            // Flags are intentionally ignored on release so a chord still
+            // ends cleanly when the modifier is let go before the key.
+            if trigger.kind != .modifier, keyCode == trigger.keyCode {
                 reportTrigger(pressed: false)
             }
 
@@ -159,13 +169,22 @@ final class HotkeyMonitor {
         switch type {
         case .flagsChanged:
             if let spec = TriggerSpec.capturedModifier(keyCode: keyCode, flags: event.flags) {
-                finishCapture(with: spec)
+                // A modifier went down. Don't finalize yet: the user may be
+                // building a chord like Control+S. Only releasing it alone
+                // selects it as a modifier-only trigger.
+                pendingCaptureModifier = spec
+            } else if let pending = pendingCaptureModifier,
+                keyCode == pending.keyCode,
+                !pending.isPressed(in: event.flags)
+            {
+                finishCapture(with: pending)
             }
         case .keyDown:
             if keyCode == Self.escapeKeyCode {
                 finishCapture(with: nil)
             } else {
-                finishCapture(with: TriggerSpec.capturedRegularKey(keyCode: keyCode))
+                finishCapture(
+                    with: TriggerSpec.capturedKeyDown(keyCode: keyCode, flags: event.flags))
             }
         default:
             break
@@ -175,6 +194,7 @@ final class HotkeyMonitor {
     private func finishCapture(with spec: TriggerSpec?) {
         let handler = captureHandler
         captureHandler = nil
+        pendingCaptureModifier = nil
         triggerDownSince = nil
         handler?(spec)
     }
