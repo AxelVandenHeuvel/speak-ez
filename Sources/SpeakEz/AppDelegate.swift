@@ -129,6 +129,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         refinementRoot.submenu = refinementMenu
         menu.addItem(refinementRoot)
 
+        // Trigger mode picker (hold vs tap-to-toggle).
+        let modeMenu = NSMenu()
+        for mode in TriggerInterpreter.Mode.allCases {
+            let item = NSMenuItem(
+                title: mode.displayName,
+                action: #selector(selectTriggerMode(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = mode.rawValue
+            item.state = settings.triggerMode == mode ? .on : .off
+            modeMenu.addItem(item)
+        }
+        let modeRoot = NSMenuItem(title: "Trigger Mode", action: nil, keyEquivalent: "")
+        modeRoot.submenu = modeMenu
+        menu.addItem(modeRoot)
+
         // Trigger key picker.
         let triggerMenu = NSMenu()
         for key in TriggerKey.allCases {
@@ -144,8 +159,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         triggerRoot.submenu = triggerMenu
         menu.addItem(triggerRoot)
 
+        let addTermItem = NSMenuItem(
+            title: "Add Vocabulary Term…", action: #selector(addVocabularyTerm),
+            keyEquivalent: "")
+        addTermItem.target = self
+        menu.addItem(addTermItem)
+
         let vocabItem = NSMenuItem(
-            title: "Edit Vocabulary…", action: #selector(editVocabulary), keyEquivalent: "")
+            title: "Edit Vocabulary File…", action: #selector(editVocabulary), keyEquivalent: "")
         vocabItem.target = self
         menu.addItem(vocabItem)
 
@@ -215,6 +236,64 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let key = TriggerKey(rawValue: raw)
         else { return }
         controller.applyTriggerKey(key)
+    }
+
+    @objc private func selectTriggerMode(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String,
+            let mode = TriggerInterpreter.Mode(rawValue: raw)
+        else { return }
+        controller.applyTriggerMode(mode)
+    }
+
+    @objc private func addVocabularyTerm() {
+        NSApp.activate(ignoringOtherApps: true)
+
+        let alert = NSAlert()
+        alert.messageText = "Add Vocabulary Term"
+        alert.informativeText =
+            "The exact spelling to insert, and optionally the things the "
+            + "transcriber mishears for it, separated by commas."
+        alert.addButton(withTitle: "Add")
+        alert.addButton(withTitle: "Cancel")
+
+        let termField = NSTextField(frame: NSRect(x: 0, y: 34, width: 260, height: 24))
+        termField.placeholderString = "Term, e.g. tmux"
+        let aliasField = NSTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
+        aliasField.placeholderString = "Sound-alikes, e.g. tea mux, teemux"
+        let accessory = NSView(frame: NSRect(x: 0, y: 0, width: 260, height: 58))
+        accessory.addSubview(termField)
+        accessory.addSubview(aliasField)
+        alert.accessoryView = accessory
+        alert.window.initialFirstResponder = termField
+
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        let term = termField.stringValue.trimmingCharacters(in: .whitespaces)
+        guard !term.isEmpty else { return }
+        let aliases = aliasField.stringValue
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+
+        let store = VocabularyStore.standard()
+        var terms = store.loadVocabulary()
+        if let existing = terms.firstIndex(where: {
+            $0.text.lowercased() == term.lowercased()
+        }) {
+            // Merge new aliases into the existing entry.
+            let merged = Set(terms[existing].aliases + aliases)
+            terms[existing] = VocabTerm(
+                text: terms[existing].text, aliases: merged.sorted(), enabled: true)
+        } else {
+            terms.append(VocabTerm(text: term, aliases: aliases, enabled: true))
+        }
+        do {
+            try store.saveVocabulary(terms)
+        } catch {
+            let failure = NSAlert()
+            failure.messageText = "Could not save the vocabulary"
+            failure.informativeText = error.localizedDescription
+            failure.runModal()
+        }
     }
 
     /// Quits and reopens the app: needed after granting Input Monitoring or

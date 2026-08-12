@@ -15,6 +15,8 @@ final class OverlayModel {
     var phase: OverlayPhase = .hidden
     /// Smoothed mic level, 0...1.
     var level: Float = 0
+    /// Secondary caption, e.g. "Tap Right Option to stop" in toggle mode.
+    var hint: String?
 }
 
 /// A small always-on-top, non-activating capsule at the bottom of the screen.
@@ -27,7 +29,7 @@ final class RecordingOverlayPanel {
 
     init() {
         panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 220, height: 44),
+            contentRect: NSRect(x: 0, y: 0, width: 380, height: 44),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: true
@@ -44,6 +46,7 @@ final class RecordingOverlayPanel {
 
     func show(_ phase: OverlayPhase) {
         model.phase = phase
+        model.hint = nil
         position()
         panel.orderFrontRegardless()
     }
@@ -51,6 +54,7 @@ final class RecordingOverlayPanel {
     func hide() {
         model.phase = .hidden
         model.level = 0
+        model.hint = nil
         panel.orderOut(nil)
     }
 
@@ -80,6 +84,11 @@ struct OverlayView: View {
                 Image(systemName: "mic.fill")
                     .foregroundStyle(.red)
                 LevelBars(level: model.level)
+                if let hint = model.hint {
+                    Text(hint)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             case .processing:
                 ProgressView()
                     .controlSize(.small)

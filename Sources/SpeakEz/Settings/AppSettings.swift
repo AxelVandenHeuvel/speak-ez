@@ -20,6 +20,12 @@ final class AppSettings {
         }
     }
 
+    var triggerMode: TriggerInterpreter.Mode {
+        didSet {
+            UserDefaults.standard.set(triggerMode.rawValue, forKey: "triggerMode")
+        }
+    }
+
     private init() {
         refinementLevel =
             UserDefaults.standard.string(forKey: "refinementLevel")
@@ -27,5 +33,8 @@ final class AppSettings {
         triggerKey =
             UserDefaults.standard.string(forKey: "triggerKey")
             .flatMap(TriggerKey.init(rawValue:)) ?? .rightOption
+        triggerMode =
+            UserDefaults.standard.string(forKey: "triggerMode")
+            .flatMap(TriggerInterpreter.Mode.init(rawValue:)) ?? .hold
     }
 }

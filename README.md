@@ -9,6 +9,8 @@ Think Wispr Flow, but free, open source, and nothing ever leaves your Mac.
 
 - Hold-to-talk dictation into any app, up to 5 minutes per recording.
 - Default trigger: **hold Right Option**. Held alone it never fires a macOS or app shortcut, so it collides with none of your existing keybinds; if you press another key while holding it, the hold cancels and your shortcut goes through untouched. Right Command, Right Control, and fn (globe) are available in the menu.
+- Three trigger modes: **Hold to Talk** (push-to-talk), **Tap to Toggle** (tap to start, tap to stop), or **Hold or Tap** (a quick tap toggles, a long hold behaves like push-to-talk).
+- Add vocabulary straight from the menu bar ("Add Vocabulary Term…"), no file editing needed.
 - On-device speech-to-text with NVIDIA Parakeet v3 running on the Apple Neural Engine via [FluidAudio](https://github.com/FluidInference/FluidAudio).
 - Long recordings are transcribed in the background while you are still speaking, so the text appears about a second after you release the key even after minutes of talking.
 - Three refinement levels, switchable from the menu bar:

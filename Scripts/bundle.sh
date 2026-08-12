@@ -14,6 +14,7 @@ APP="build/speakEZ.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN_PATH/SpeakEz" "$APP/Contents/MacOS/speakEZ"
+cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -28,6 +29,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 	<string>speakEZ</string>
 	<key>CFBundleExecutable</key>
 	<string>speakEZ</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>

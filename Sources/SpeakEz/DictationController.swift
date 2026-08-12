@@ -23,6 +23,9 @@ final class DictationController {
     private let settings = AppSettings.shared
     private let store = VocabularyStore.standard()
 
+    private var interpreter = TriggerInterpreter()
+    private var recordingStartedAt: Date?
+
     private var maxDurationTimer: Timer?
     private var chunkTimer: Timer?
     private var pipelineTask: Task<Void, Never>?
@@ -39,6 +42,7 @@ final class DictationController {
     /// Sets up everything except the keyboard tap. Call once at launch.
     func start() {
         hotkey.triggerKey = settings.triggerKey
+        interpreter.mode = settings.triggerMode
         if settings.refinementLevel == .ai {
             AIRefiner.prewarm()
         }
@@ -57,9 +61,22 @@ final class DictationController {
             self.overlay.model.level = smoothed
         }
 
-        hotkey.onTriggerDown = { [weak self] in self?.handle(.triggerPressed) }
+        hotkey.onTriggerDown = { [weak self] in
+            guard let self else { return }
+            let elapsed =
+                machine.state == .recording
+                ? recordingStartedAt.map { -$0.timeIntervalSinceNow } : nil
+            self.apply(self.interpreter.keyDown(recordingFor: elapsed))
+        }
         hotkey.onTriggerUp = { [weak self] heldFor in
-            self?.handle(.triggerReleased(heldFor: heldFor))
+            guard let self else { return }
+            let action = self.interpreter.keyUp(heldFor: heldFor)
+            self.apply(action)
+            // A quick tap that left the recording running: tell the user how
+            // to end it.
+            if action == .none, machine.state == .recording {
+                overlay.model.hint = "Tap \(settings.triggerKey.displayName) to stop"
+            }
         }
         hotkey.onEscape = { [weak self] in
             guard let self, machine.state != .idle else { return }
@@ -84,6 +101,17 @@ final class DictationController {
     /// Whether the keyboard tap is live (dictation can actually trigger).
     var hotkeyActive: Bool { hotkey.isRunning }
 
+    private func apply(_ action: TriggerInterpreter.Action) {
+        switch action {
+        case .begin:
+            handle(.triggerPressed)
+        case .end(let heldFor):
+            handle(.triggerReleased(heldFor: heldFor))
+        case .none:
+            break
+        }
+    }
+
     private func handle(_ event: DictationEvent) {
         let commands = machine.handle(event)
         onStateChange?(machine.state)
@@ -97,6 +125,7 @@ final class DictationController {
         case .startRecording:
             do {
                 try recorder.start()
+                recordingStartedAt = Date()
                 overlay.show(.recording)
                 startMaxDurationTimer()
                 if modelReady {
@@ -113,6 +142,7 @@ final class DictationController {
         case .stopRecordingThenTranscribe:
             stopMaxDurationTimer()
             stopChunkTimer()
+            recordingStartedAt = nil
             let segments = recorder.stop()
             overlay.show(.processing)
             pipelineTask = Task { [weak self] in
@@ -130,6 +160,7 @@ final class DictationController {
         case .discardRecording:
             stopMaxDurationTimer()
             stopChunkTimer()
+            recordingStartedAt = nil
             recorder.discard()
             abandonChunkSession()
             overlay.hide()
@@ -143,6 +174,7 @@ final class DictationController {
         case .reportError(let message):
             stopMaxDurationTimer()
             stopChunkTimer()
+            recordingStartedAt = nil
             recorder.discard()
             abandonChunkSession()
             pipelineTask?.cancel()
@@ -203,6 +235,11 @@ final class DictationController {
     func applyTriggerKey(_ key: TriggerKey) {
         settings.triggerKey = key
         hotkey.triggerKey = key
+    }
+
+    func applyTriggerMode(_ mode: TriggerInterpreter.Mode) {
+        settings.triggerMode = mode
+        interpreter.mode = mode
     }
 
     private func deliver(_ text: String) {
