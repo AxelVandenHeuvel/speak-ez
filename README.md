@@ -1,31 +1,19 @@
-# speakEZ
+# speak-ez
 
-A free, open-source, fully-local dictation app for macOS.
-Hold a key, speak, release, and clean text appears wherever your cursor is.
+Hold a key, talk, let go.
+Clean text shows up wherever your cursor is.
 
-Think Wispr Flow, but free, open source, and nothing ever leaves your Mac.
+The point of this app is the cleanup, not just the transcription.
+Here is what that looks like:
 
-## Features
+> what you said:
+> *"um so i uh think we should of tested the the deploy script before we pushes it you know"*
+>
+> what gets typed:
+> *"So I think we should have tested the deploy script before we push it."*
 
-- Hold-to-talk dictation into any app, up to 5 minutes per recording.
-- Default trigger: **hold Right Option**. Held alone it never fires a macOS or app shortcut, so it collides with none of your existing keybinds; if you press another key while holding it, the hold cancels and your shortcut goes through untouched.
-- Fully customizable trigger: pick a preset (Right Option/Command/Control, fn) or use "Set Custom Trigger Key…" and press any key or two-key combination (like ⌃S); modifiers, chords, and F13-F19 work best.
-- Two trigger modes: **Hold to Talk** (push-to-talk) or **Tap to Toggle** (tap to start, tap to stop).
-- Add vocabulary straight from the menu bar ("Add Vocabulary Term…"), no file editing needed.
-- On-device speech-to-text with NVIDIA Parakeet v3 running on the Apple Neural Engine via [FluidAudio](https://github.com/FluidInference/FluidAudio).
-- Long recordings are transcribed in the background while you are still speaking, so the text appears about a second after you release the key even after minutes of talking.
-- Three refinement levels, switchable from the menu bar:
-  - **Off**: the raw transcript, untouched.
-  - **Basic**: instant rule-based cleanup: strips "um"/"uh", collapses stutters ("the the"), fixes the punctuation seams, applies your vocabulary.
-  - **AI**: Basic plus a polish pass by Apple's on-device foundation model (needs macOS 26 with Apple Intelligence; falls back to Basic elsewhere). No extra download, nothing leaves the machine.
-- Custom vocabulary: teach it your jargon ("tmux", "herdr", project names) with optional sound-alike aliases ("tea mux"), stored as human-editable JSON.
-- Floating recording indicator with live mic levels while the trigger key is held; Esc cancels.
-- No accounts, no telemetry, no network use after the one-time model download (~1 GB).
-
-## Requirements
-
-- Apple Silicon Mac, macOS 14 or later (AI refinement needs macOS 26).
-- To build from source: Xcode Command Line Tools are enough, no Xcode needed.
+Everything runs on your Mac.
+No account, no subscription, no telemetry, and nothing is ever uploaded.
 
 ## Install
 
@@ -33,27 +21,75 @@ Think Wispr Flow, but free, open source, and nothing ever leaves your Mac.
 curl -fsSL https://raw.githubusercontent.com/AxelVandenHeuvel/speak-ez/main/install.sh | sh
 ```
 
-This builds speakEZ from source on your machine (~2 minutes; needs the Xcode Command Line Tools, and offers to install them if missing) and puts it in /Applications.
-Because the app is built locally there are no Gatekeeper warnings and you are not trusting a prebuilt binary.
+That builds it from source (about 2 minutes) and puts speakEZ.app in /Applications.
+You need the Xcode Command Line Tools; the script offers to install them if they are missing.
+Building locally means there is no Gatekeeper warning and no prebuilt binary you have to trust.
 
-Or build manually:
+On first launch you grant three permissions (Microphone, Input Monitoring, Accessibility), hit "Relaunch speakEZ" in the menu so macOS applies them, and let the speech model download once (~1 GB).
+
+## How it works
+
+Speech-to-text is NVIDIA's Parakeet v3 running on the Neural Engine, via [FluidAudio](https://github.com/FluidInference/FluidAudio).
+While you hold the key, audio is transcribed in the background in chunks, so even after five minutes of talking the text lands about a second after you release.
+
+Cleanup has three levels, switchable from the menu bar:
+
+- **Off**: you get the raw transcript.
+- **Basic**: deterministic rules strip "um"/"uh" and stutters ("the the"), fix the punctuation seams, and apply your vocabulary. Adds zero latency.
+- **AI**: Basic, then Apple's on-device foundation model fixes grammar and phrasing. This is the model that ships with Apple Intelligence, so there is nothing extra to download or configure. Needs macOS 26; otherwise it quietly falls back to Basic.
+
+The refiner is told to clean, not rewrite.
+If the model is slow or returns something that is not recognizably your sentence, you get the rules-based result instead.
+
+## Vocabulary
+
+Speech models mangle jargon.
+Mine kept hearing "tea mux" for tmux, which is why this exists.
+
+Menu bar -> "Add Vocabulary Term…", type the real spelling and optionally the mishearings:
+
+- term: `tmux`, sound-alikes: `tea mux, teemux`
+- term: `PostgreSQL`, sound-alikes: `postgres sequel`
+
+Terms are also matched fuzzily (one edit away, same first letter), so "herder" becomes "herdr" without an alias.
+Matching is deliberately conservative so ordinary words never get turned into your jargon.
+It is all stored as plain JSON in `~/Library/Application Support/speakEZ/` if you would rather edit the file.
+
+## Trigger key
+
+Default is holding Right Option.
+Held alone it triggers nothing in macOS, and if you press another key while holding it, the recording cancels and your shortcut goes through, so it cannot eat your keybinds.
+
+You can change it in the menu: presets, or press any key or two-key combo (like ⌃S) after clicking "Set Custom Trigger Key…".
+There is also a tap-to-toggle mode if you would rather not hold the key while talking.
+Esc cancels a recording, and recordings cap at five minutes.
+
+## Compared to similar projects
+
+[OpenSuperWhisper](https://github.com/Starmel/OpenSuperWhisper), [VoiceInk](https://github.com/Beingpax/VoiceInk), and [Handy](https://github.com/cjpais/Handy) are all good local transcription apps, and some do things this one does not: more engines, more languages, transcribing audio files.
+
+The difference here is the output.
+Those tools give you what you said; this one gives you what you meant to type, and the AI pass uses the model already on your Mac instead of asking you to set up ollama or an API key.
+If you want a transcription tool, use one of those.
+If you want dictation that does not need manual cleanup afterwards, that is this.
+
+## Requirements
+
+- Apple Silicon Mac, macOS 14 or later.
+- AI cleanup needs macOS 26 with Apple Intelligence enabled.
+- Xcode Command Line Tools to build (no Xcode needed).
+
+## Development
 
 ```sh
-git clone https://github.com/AxelVandenHeuvel/speak-ez.git && cd speak-ez
-./Scripts/bundle.sh
-open build/speakEZ.app
+./Scripts/test.sh          # unit tests, no models or permissions needed
+./Scripts/integration.sh   # real speech pipeline against a fixture recording
+./Scripts/bundle.sh        # build speakEZ.app into build/
 ```
 
-On first launch, grant the three permissions the app asks for (Microphone, Input Monitoring, Accessibility), then use the menu's "Relaunch speakEZ" button so macOS applies them, and let the speech model download (~1 GB, one time).
-If you switch the trigger to fn (globe), also set System Settings -> Keyboard -> "Press globe key" to "Do Nothing" so it stops opening the emoji picker.
-
-## Develop
-
-```sh
-./Scripts/test.sh          # unit tests (no models or permissions needed)
-./Scripts/integration.sh   # full speech pipeline against the real models
-```
+The pure logic (refinement rules, vocabulary matching, state machine) lives in `Sources/SpeakEzKit` with no AppKit or ML imports, so it is all unit-testable.
+CI runs the tests and the full pipeline on every push.
 
 ## License
 
-MIT. See LICENSE and NOTICE for bundled model and library attributions.
+MIT. See NOTICE for model and library attributions.
