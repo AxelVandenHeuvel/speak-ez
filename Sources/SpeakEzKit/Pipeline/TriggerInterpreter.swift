@@ -9,15 +9,11 @@ public struct TriggerInterpreter: Sendable {
         case hold
         /// Tap starts, tap again stops. Releases are ignored.
         case toggle
-        /// Auto: a quick tap starts a toggle recording; a long hold behaves
-        /// like push-to-talk and stops on release.
-        case holdOrTap
 
         public var displayName: String {
             switch self {
             case .hold: return "Hold to Talk"
             case .toggle: return "Tap to Toggle"
-            case .holdOrTap: return "Hold or Tap"
             }
         }
     }
@@ -30,16 +26,12 @@ public struct TriggerInterpreter: Sendable {
 
     public var mode: Mode
 
-    /// Releases shorter than this count as a tap rather than a hold.
-    public let tapThreshold: TimeInterval
-
     /// Set when a key-down stopped a toggle recording, so the matching
     /// key-up must not be interpreted again.
     private var suppressNextUp = false
 
-    public init(mode: Mode = .hold, tapThreshold: TimeInterval = 0.35) {
+    public init(mode: Mode = .hold) {
         self.mode = mode
-        self.tapThreshold = tapThreshold
     }
 
     /// `recordingFor` is non-nil (elapsed seconds) while a recording is
@@ -54,7 +46,7 @@ public struct TriggerInterpreter: Sendable {
             // A second key-down while recording in hold mode cannot really
             // happen (the key is already down); ignore defensively.
             return .none
-        case .toggle, .holdOrTap:
+        case .toggle:
             suppressNextUp = true
             return .end(heldFor: elapsed)
         }
@@ -70,9 +62,6 @@ public struct TriggerInterpreter: Sendable {
             return .end(heldFor: heldFor)
         case .toggle:
             return .none
-        case .holdOrTap:
-            // Quick tap: leave the recording running (toggle-style).
-            return heldFor < tapThreshold ? .none : .end(heldFor: heldFor)
         }
     }
 }

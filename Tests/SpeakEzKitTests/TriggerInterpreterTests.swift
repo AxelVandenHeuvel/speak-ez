@@ -22,22 +22,6 @@ import Testing
         #expect(interpreter.keyUp(heldFor: 0.1) == .none)
     }
 
-    @Test func holdOrTapQuickTapTogglesOn() {
-        var interpreter = TriggerInterpreter(mode: .holdOrTap)
-        #expect(interpreter.keyDown(recordingFor: nil) == .begin)
-        // Quick release: recording keeps going.
-        #expect(interpreter.keyUp(heldFor: 0.2) == .none)
-        // Tap again to stop.
-        #expect(interpreter.keyDown(recordingFor: 7.0) == .end(heldFor: 7.0))
-        #expect(interpreter.keyUp(heldFor: 0.15) == .none)
-    }
-
-    @Test func holdOrTapLongHoldStopsOnRelease() {
-        var interpreter = TriggerInterpreter(mode: .holdOrTap)
-        #expect(interpreter.keyDown(recordingFor: nil) == .begin)
-        #expect(interpreter.keyUp(heldFor: 3.0) == .end(heldFor: 3.0))
-    }
-
     @Test func suppressionResetsOnNextDown() {
         var interpreter = TriggerInterpreter(mode: .toggle)
         _ = interpreter.keyDown(recordingFor: nil)
