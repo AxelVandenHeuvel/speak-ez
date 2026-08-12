@@ -111,7 +111,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             menu.addItem(.separator())
         }
 
-        menu.addItem(disabledItem("Hold \(settings.triggerKey.displayName) to dictate"))
+        let verb = settings.triggerMode == .toggle ? "Tap" : "Hold"
+        menu.addItem(disabledItem("\(verb) \(settings.trigger.displayName) to dictate"))
         menu.addItem(.separator())
 
         // Refinement level picker.
@@ -144,17 +145,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         modeRoot.submenu = modeMenu
         menu.addItem(modeRoot)
 
-        // Trigger key picker.
+        // Trigger key picker: presets plus a press-any-key recorder.
         let triggerMenu = NSMenu()
-        for key in TriggerKey.allCases {
+        for (index, preset) in TriggerSpec.presets.enumerated() {
             let item = NSMenuItem(
-                title: key.displayName,
-                action: #selector(selectTriggerKey(_:)), keyEquivalent: "")
+                title: preset.displayName,
+                action: #selector(selectPresetTrigger(_:)), keyEquivalent: "")
             item.target = self
-            item.representedObject = key.rawValue
-            item.state = settings.triggerKey == key ? .on : .off
+            item.tag = index
+            item.state = settings.trigger == preset ? .on : .off
             triggerMenu.addItem(item)
         }
+        if !TriggerSpec.presets.contains(settings.trigger) {
+            let custom = NSMenuItem(
+                title: "Custom: \(settings.trigger.displayName)", action: nil, keyEquivalent: "")
+            custom.state = .on
+            triggerMenu.addItem(custom)
+        }
+        triggerMenu.addItem(.separator())
+        let recordItem = NSMenuItem(
+            title: "Set Custom Trigger Key…",
+            action: #selector(recordCustomTrigger), keyEquivalent: "")
+        recordItem.target = self
+        triggerMenu.addItem(recordItem)
+
         let triggerRoot = NSMenuItem(title: "Trigger Key", action: nil, keyEquivalent: "")
         triggerRoot.submenu = triggerMenu
         menu.addItem(triggerRoot)
@@ -231,11 +245,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    @objc private func selectTriggerKey(_ sender: NSMenuItem) {
-        guard let raw = sender.representedObject as? String,
-            let key = TriggerKey(rawValue: raw)
-        else { return }
-        controller.applyTriggerKey(key)
+    @objc private func selectPresetTrigger(_ sender: NSMenuItem) {
+        guard TriggerSpec.presets.indices.contains(sender.tag) else { return }
+        controller.applyTrigger(TriggerSpec.presets[sender.tag])
+    }
+
+    @objc private func recordCustomTrigger() {
+        controller.captureTrigger { [weak self] spec in
+            guard let self, let spec else { return }
+            self.controller.applyTrigger(spec)
+            if !spec.isRecommendable {
+                NSApp.activate(ignoringOtherApps: true)
+                let alert = NSAlert()
+                alert.messageText = "Heads up: \(spec.displayName) keeps its normal action"
+                alert.informativeText =
+                    "speakEZ listens without blocking keys, so pressing "
+                    + "\(spec.displayName) will still do what it usually does "
+                    + "while also triggering dictation. Modifier keys or F13 to F19 "
+                    + "make cleaner triggers."
+                alert.runModal()
+            }
+        }
     }
 
     @objc private func selectTriggerMode(_ sender: NSMenuItem) {

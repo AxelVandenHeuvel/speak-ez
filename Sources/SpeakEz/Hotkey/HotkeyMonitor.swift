@@ -2,19 +2,27 @@ import AppKit
 import CoreGraphics
 
 /// Watches the keyboard system-wide with a listen-only CGEventTap and reports
-/// hold/release of the trigger key, Esc presses, and any other key pressed
+/// press/release of the trigger key, Esc presses, and any other key pressed
 /// while the trigger is held (which cancels the hold so shortcuts like
-/// fn+arrow keep working without dictating).
+/// option-arrow keep working without dictating).
+///
+/// Also provides a capture mode that reports the next key the user presses,
+/// used by "Set Custom Trigger Key".
 ///
 /// Requires the Input Monitoring permission.
 @MainActor
 final class HotkeyMonitor {
-    var triggerKey: TriggerKey = .rightOption
+    var trigger: TriggerSpec = .rightOption
 
     var onTriggerDown: (() -> Void)?
     var onTriggerUp: ((_ heldFor: TimeInterval) -> Void)?
     var onEscape: (() -> Void)?
     var onOtherKeyDuringHold: (() -> Void)?
+
+    /// While set, the next key press is reported here instead of being
+    /// interpreted (nil means the user cancelled with Esc), and normal
+    /// trigger handling is paused.
+    var captureHandler: ((TriggerSpec?) -> Void)?
 
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
@@ -31,6 +39,7 @@ final class HotkeyMonitor {
         let mask: CGEventMask =
             (1 << CGEventType.flagsChanged.rawValue)
             | (1 << CGEventType.keyDown.rawValue)
+            | (1 << CGEventType.keyUp.rawValue)
 
         let selfPtr = Unmanaged.passUnretained(self).toOpaque()
         guard
@@ -61,7 +70,7 @@ final class HotkeyMonitor {
         runLoopSource = source
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
-        NSLog("HotkeyMonitor: tap installed, trigger=%@", triggerKey.rawValue)
+        NSLog("HotkeyMonitor: tap installed, trigger=%@", trigger.displayName)
         return true
     }
 
@@ -91,32 +100,82 @@ final class HotkeyMonitor {
             if let tap = eventTap {
                 CGEvent.tapEnable(tap: tap, enable: true)
             }
+            return
+        default:
+            break
+        }
 
+        if captureHandler != nil {
+            handleCapture(type: type, event: event)
+            return
+        }
+
+        let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
+
+        switch type {
         case .flagsChanged:
-            let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
-            guard keyCode == triggerKey.keyCode else { return }
-            let pressed = triggerKey.isPressed(in: event.flags)
-            if pressed, triggerDownSince == nil {
-                triggerDownSince = Date()
-                onTriggerDown?()
-            } else if !pressed, let since = triggerDownSince {
-                triggerDownSince = nil
-                onTriggerUp?(Date().timeIntervalSince(since))
-            }
+            guard trigger.kind == .modifier, keyCode == trigger.keyCode else { return }
+            reportTrigger(pressed: trigger.isPressed(in: event.flags))
 
         case .keyDown:
-            let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
+            if trigger.kind == .regular, keyCode == trigger.keyCode {
+                let isAutorepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
+                if !isAutorepeat {
+                    reportTrigger(pressed: true)
+                }
+                return
+            }
             if keyCode == Self.escapeKeyCode {
                 onEscape?()
             } else if triggerDownSince != nil {
                 // The user is typing a shortcut with the trigger key held
-                // (for example fn+arrow). Treat the hold as accidental.
+                // (for example option-arrow). Treat the hold as accidental.
                 triggerDownSince = nil
                 onOtherKeyDuringHold?()
+            }
+
+        case .keyUp:
+            if trigger.kind == .regular, keyCode == trigger.keyCode {
+                reportTrigger(pressed: false)
             }
 
         default:
             break
         }
+    }
+
+    private func reportTrigger(pressed: Bool) {
+        if pressed, triggerDownSince == nil {
+            triggerDownSince = Date()
+            onTriggerDown?()
+        } else if !pressed, let since = triggerDownSince {
+            triggerDownSince = nil
+            onTriggerUp?(Date().timeIntervalSince(since))
+        }
+    }
+
+    private func handleCapture(type: CGEventType, event: CGEvent) {
+        let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
+        switch type {
+        case .flagsChanged:
+            if let spec = TriggerSpec.capturedModifier(keyCode: keyCode, flags: event.flags) {
+                finishCapture(with: spec)
+            }
+        case .keyDown:
+            if keyCode == Self.escapeKeyCode {
+                finishCapture(with: nil)
+            } else {
+                finishCapture(with: TriggerSpec.capturedRegularKey(keyCode: keyCode))
+            }
+        default:
+            break
+        }
+    }
+
+    private func finishCapture(with spec: TriggerSpec?) {
+        let handler = captureHandler
+        captureHandler = nil
+        triggerDownSince = nil
+        handler?(spec)
     }
 }

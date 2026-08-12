@@ -7,6 +7,8 @@ enum OverlayPhase: Equatable {
     case recording
     case processing
     case error(String)
+    /// An instruction to the user, e.g. during trigger-key capture.
+    case prompt(String)
 }
 
 @MainActor
@@ -98,6 +100,11 @@ struct OverlayView: View {
             case .error(let message):
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundStyle(.yellow)
+                Text(message)
+                    .font(.callout)
+                    .lineLimit(1)
+            case .prompt(let message):
+                Image(systemName: "keyboard")
                 Text(message)
                     .font(.callout)
                     .lineLimit(1)

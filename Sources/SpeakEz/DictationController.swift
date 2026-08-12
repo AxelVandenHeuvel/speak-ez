@@ -41,7 +41,7 @@ final class DictationController {
 
     /// Sets up everything except the keyboard tap. Call once at launch.
     func start() {
-        hotkey.triggerKey = settings.triggerKey
+        hotkey.trigger = settings.trigger
         interpreter.mode = settings.triggerMode
         if settings.refinementLevel == .ai {
             AIRefiner.prewarm()
@@ -75,7 +75,7 @@ final class DictationController {
             // A quick tap that left the recording running: tell the user how
             // to end it.
             if action == .none, machine.state == .recording {
-                overlay.model.hint = "Tap \(settings.triggerKey.displayName) to stop"
+                overlay.model.hint = "Tap \(settings.trigger.displayName) to stop"
             }
         }
         hotkey.onEscape = { [weak self] in
@@ -232,14 +232,24 @@ final class DictationController {
     }
 
     /// Called when the user changes the trigger key in the menu or settings.
-    func applyTriggerKey(_ key: TriggerKey) {
-        settings.triggerKey = key
-        hotkey.triggerKey = key
+    func applyTrigger(_ spec: TriggerSpec) {
+        settings.trigger = spec
+        hotkey.trigger = spec
     }
 
     func applyTriggerMode(_ mode: TriggerInterpreter.Mode) {
         settings.triggerMode = mode
         interpreter.mode = mode
+    }
+
+    /// Shows a prompt and reports the next key the user presses.
+    /// The completion receives nil if the user cancelled with Esc.
+    func captureTrigger(completion: @escaping (TriggerSpec?) -> Void) {
+        overlay.show(.prompt("Press the key to use as the trigger. Esc cancels."))
+        hotkey.captureHandler = { [weak self] spec in
+            self?.overlay.hide()
+            completion(spec)
+        }
     }
 
     private func deliver(_ text: String) {
