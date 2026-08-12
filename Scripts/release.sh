@@ -1,5 +1,5 @@
 #!/bin/bash
-# Builds a distributable zip of SpeakEz.app.
+# Builds a distributable zip of speakEZ.app.
 #
 # With a "Developer ID Application" identity installed this signs properly
 # and (with NOTARY_PROFILE set to a notarytool keychain profile) notarizes.

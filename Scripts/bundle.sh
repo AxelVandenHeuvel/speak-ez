@@ -1,5 +1,5 @@
 #!/bin/bash
-# Builds SpeakEz.app from the SwiftPM package. No Xcode required.
+# Builds speakEZ.app from the SwiftPM package. No Xcode required.
 # Usage: Scripts/bundle.sh [debug|release]
 set -euo pipefail
 cd "$(dirname "$0")/.."

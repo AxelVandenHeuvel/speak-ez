@@ -35,7 +35,7 @@ On first launch you grant three permissions (Microphone, Input Monitoring, Acces
 ## How it works
 
 Speech-to-text is NVIDIA's Parakeet v3 running on the Neural Engine, via [FluidAudio](https://github.com/FluidInference/FluidAudio).
-While you hold the key, audio is transcribed in the background in chunks, so even after five minutes of talking the text lands about a second after you release.
+It transcribes at roughly 50x real time on Apple Silicon: a normal dictation lands well under a second after you release the key, and even a full five-minute recording takes only a few seconds.
 
 Cleanup has three levels, switchable from the menu bar:
 
