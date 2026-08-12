@@ -1,0 +1,8 @@
+speakEZ uses the following third-party software and models:
+
+- FluidAudio (https://github.com/FluidInference/FluidAudio), Apache License 2.0.
+- NVIDIA Parakeet TDT 0.6B v3, CoreML conversion by FluidInference
+  (https://huggingface.co/FluidInference/parakeet-tdt-0.6b-v3-coreml), CC-BY-4.0.
+  Downloaded on first launch.
+- AI refinement uses Apple's on-device foundation model via the FoundationModels
+  framework (part of macOS 26); no third-party model is bundled or downloaded.

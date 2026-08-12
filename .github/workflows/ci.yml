@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache SwiftPM
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
+          restore-keys: spm-${{ runner.os }}-
+      - name: Unit tests
+        run: ./Scripts/test.sh
+      - name: Build app bundle
+        run: ./Scripts/bundle.sh debug
+
+  integration:
+    # Full speech pipeline against the real models (~1 GB download, cached).
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache SwiftPM
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
+          restore-keys: spm-${{ runner.os }}-
+      - name: Cache models
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Application Support/FluidAudio/Models
+          key: fluidaudio-models-v3
+      - name: Integration test
+        run: ./Scripts/integration.sh
