@@ -153,8 +153,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
 
-        menu.addItem(disabledItem(modelStatusTitle))
-        menu.addItem(.separator())
+        // Header: how to dictate, plus the model status only when it is not
+        // simply ready (ready is the normal state and needs no announcement).
+        let verb = settings.triggerMode == .toggle ? "Tap" : "Hold"
+        menu.addItem(disabledItem("\(verb) \(settings.trigger.displayName) to dictate"))
+        if modelStatus != .ready {
+            menu.addItem(disabledItem(modelStatusTitle))
+        }
 
         // The event tap actually running is the ground truth for Input
         // Monitoring; the permission API can lag or lie after re-signing.
@@ -164,6 +169,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             && permissions.accessibilityGranted
 
         if !allOK {
+            menu.addItem(.separator())
             menu.addItem(permissionItem(
                 "Microphone", granted: permissions.microphoneGranted,
                 anchor: "Privacy_Microphone"))
@@ -179,14 +185,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 action: #selector(relaunch), keyEquivalent: "")
             relaunchItem.target = self
             menu.addItem(relaunchItem)
-            menu.addItem(.separator())
         }
 
-        let verb = settings.triggerMode == .toggle ? "Tap" : "Hold"
-        menu.addItem(disabledItem("\(verb) \(settings.trigger.displayName) to dictate"))
         menu.addItem(.separator())
+        menu.addItem(withIcon(historyMenuItem(), "clock.arrow.circlepath"))
 
-        // Refinement level picker.
+        menu.addItem(.separator())
+        menu.addItem(withIcon(refinementMenuItem(), "wand.and.stars"))
+        menu.addItem(withIcon(triggerMenuItem(), "keyboard"))
+        menu.addItem(withIcon(vocabularyMenuItem(), "character.book.closed"))
+
+        menu.addItem(.separator())
+        // State is conveyed by the icon, not a checkmark: a lone checkable
+        // item gets indented past its stateless neighbors otherwise.
+        let loginEnabled = SMAppService.mainApp.status == .enabled
+        let loginItem = NSMenuItem(
+            title: "Launch at Login", action: #selector(toggleLaunchAtLogin),
+            keyEquivalent: "")
+        loginItem.target = self
+        menu.addItem(withIcon(loginItem, loginEnabled ? "checkmark.circle.fill" : "circle"))
+
+        let quitItem = NSMenuItem(
+            title: "Quit speakEZ", action: #selector(NSApplication.terminate(_:)),
+            keyEquivalent: "q")
+        menu.addItem(withIcon(quitItem, "power"))
+    }
+
+    /// Uniform leading icons keep every top-level row flush-aligned.
+    private func withIcon(_ item: NSMenuItem, _ symbolName: String) -> NSMenuItem {
+        item.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)
+        return item
+    }
+
+    private func refinementMenuItem() -> NSMenuItem {
         let refinementMenu = NSMenu()
         for level in RefinementLevel.allCases {
             let item = NSMenuItem(
@@ -197,12 +228,52 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             item.state = settings.refinementLevel == level ? .on : .off
             refinementMenu.addItem(item)
         }
-        let refinementRoot = NSMenuItem(title: "Refinement", action: nil, keyEquivalent: "")
-        refinementRoot.submenu = refinementMenu
-        menu.addItem(refinementRoot)
 
-        // Trigger mode picker (hold vs tap-to-toggle).
-        let modeMenu = NSMenu()
+        // Individual cleanup passes, so users can keep e.g. filler removal
+        // while dropping capitalization fixes for lowercase-style chats.
+        refinementMenu.addItem(.sectionHeader(title: "Cleanup Includes"))
+        let options = settings.refinementOptions
+        let toggles: [(String, String, Bool)] = [
+            ("Remove Filler Words", "removeFillers", options.removeFillers),
+            ("Collapse Stutters", "collapseStutters", options.collapseStutters),
+            ("Apply Vocabulary", "applyVocabulary", options.applyVocabulary),
+            ("Fix Capitalization", "fixCapitalization", options.fixCapitalization),
+        ]
+        for (title, key, enabled) in toggles {
+            let item = NSMenuItem(
+                title: title, action: #selector(toggleRefinementOption(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = key
+            item.state = enabled ? .on : .off
+            // The passes only run when refinement is on at all.
+            item.isEnabled = settings.refinementLevel != .off
+            refinementMenu.addItem(item)
+        }
+        refinementMenu.autoenablesItems = false
+
+        let root = NSMenuItem(title: "Refinement", action: nil, keyEquivalent: "")
+        root.submenu = refinementMenu
+        return root
+    }
+
+    @objc private func toggleRefinementOption(_ sender: NSMenuItem) {
+        guard let key = sender.representedObject as? String else { return }
+        var options = settings.refinementOptions
+        switch key {
+        case "removeFillers": options.removeFillers.toggle()
+        case "collapseStutters": options.collapseStutters.toggle()
+        case "applyVocabulary": options.applyVocabulary.toggle()
+        case "fixCapitalization": options.fixCapitalization.toggle()
+        default: return
+        }
+        settings.refinementOptions = options
+    }
+
+    /// One combined Trigger submenu: mode section on top, key section below.
+    private func triggerMenuItem() -> NSMenuItem {
+        let triggerMenu = NSMenu()
+
+        triggerMenu.addItem(.sectionHeader(title: "Mode"))
         for mode in TriggerInterpreter.Mode.allCases {
             let item = NSMenuItem(
                 title: mode.displayName,
@@ -210,14 +281,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             item.target = self
             item.representedObject = mode.rawValue
             item.state = settings.triggerMode == mode ? .on : .off
-            modeMenu.addItem(item)
+            triggerMenu.addItem(item)
         }
-        let modeRoot = NSMenuItem(title: "Trigger Mode", action: nil, keyEquivalent: "")
-        modeRoot.submenu = modeMenu
-        menu.addItem(modeRoot)
 
-        // Trigger key picker: presets plus a press-any-key recorder.
-        let triggerMenu = NSMenu()
+        triggerMenu.addItem(.sectionHeader(title: "Key"))
         for (index, preset) in TriggerSpec.presets.enumerated() {
             let item = NSMenuItem(
                 title: preset.displayName,
@@ -233,46 +300,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             custom.state = .on
             triggerMenu.addItem(custom)
         }
-        triggerMenu.addItem(.separator())
         let recordItem = NSMenuItem(
             title: "Set Custom Trigger Key…",
             action: #selector(recordCustomTrigger), keyEquivalent: "")
         recordItem.target = self
         triggerMenu.addItem(recordItem)
 
-        let triggerRoot = NSMenuItem(title: "Trigger Key", action: nil, keyEquivalent: "")
-        triggerRoot.submenu = triggerMenu
-        menu.addItem(triggerRoot)
+        let root = NSMenuItem(title: "Trigger", action: nil, keyEquivalent: "")
+        root.submenu = triggerMenu
+        return root
+    }
 
-        menu.addItem(historyMenuItem())
+    private func vocabularyMenuItem() -> NSMenuItem {
+        let vocabMenu = NSMenu()
 
         let addTermItem = NSMenuItem(
-            title: "Add Vocabulary Term…", action: #selector(addVocabularyTerm),
-            keyEquivalent: "")
+            title: "Add Term…", action: #selector(addVocabularyTerm), keyEquivalent: "")
         addTermItem.target = self
-        menu.addItem(addTermItem)
+        vocabMenu.addItem(addTermItem)
 
+        vocabMenu.addItem(.separator())
         let vocabItem = NSMenuItem(
             title: "Edit Vocabulary File…", action: #selector(editVocabulary), keyEquivalent: "")
         vocabItem.target = self
-        menu.addItem(vocabItem)
+        vocabMenu.addItem(vocabItem)
 
         let fillersItem = NSMenuItem(
             title: "Edit Filler Words…", action: #selector(editFillers), keyEquivalent: "")
         fillersItem.target = self
-        menu.addItem(fillersItem)
+        vocabMenu.addItem(fillersItem)
 
-        let loginItem = NSMenuItem(
-            title: "Launch at Login", action: #selector(toggleLaunchAtLogin),
-            keyEquivalent: "")
-        loginItem.target = self
-        loginItem.state = SMAppService.mainApp.status == .enabled ? .on : .off
-        menu.addItem(loginItem)
-
-        menu.addItem(.separator())
-        menu.addItem(NSMenuItem(
-            title: "Quit speakEZ", action: #selector(NSApplication.terminate(_:)),
-            keyEquivalent: "q"))
+        let root = NSMenuItem(title: "Vocabulary", action: nil, keyEquivalent: "")
+        root.submenu = vocabMenu
+        return root
     }
 
     /// The History submenu: last few dictations, each expandable to compare

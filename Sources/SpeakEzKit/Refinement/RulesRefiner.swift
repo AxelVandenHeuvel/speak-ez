@@ -12,11 +12,17 @@ public struct RulesRefiner: TextRefiner {
     private let fillerWords: Set<String>
     private let fillerPhrases: [[String]]
     private let corrector: VocabularyCorrector?
+    private let options: RefinementOptions
 
-    public init(lexicon: FillerLexicon = .standard, vocabulary: [VocabTerm] = []) {
+    public init(
+        lexicon: FillerLexicon = .standard,
+        vocabulary: [VocabTerm] = [],
+        options: RefinementOptions = .all
+    ) {
         self.fillerWords = Set(lexicon.words)
         self.fillerPhrases = lexicon.phrases.map { $0.split(separator: " ").map(String.init) }
         self.corrector = vocabulary.isEmpty ? nil : VocabularyCorrector(terms: vocabulary)
+        self.options = options
     }
 
     public func refine(_ text: String) async throws -> String {
@@ -25,12 +31,16 @@ public struct RulesRefiner: TextRefiner {
 
     public func refineSync(_ text: String) -> String {
         var tokens = Tokenizer.tokenize(text)
-        tokens = removeFillers(tokens)
-        tokens = collapseRepeats(tokens)
-        if let corrector {
+        if options.removeFillers {
+            tokens = removeFillers(tokens)
+        }
+        if options.collapseStutters {
+            tokens = collapseRepeats(tokens)
+        }
+        if options.applyVocabulary, let corrector {
             tokens = applyVocabulary(tokens, corrector: corrector)
         }
-        return Self.tidy(tokens)
+        return Self.tidy(tokens, capitalize: options.fixCapitalization)
     }
 
     // MARK: - Fillers
@@ -185,8 +195,8 @@ public struct RulesRefiner: TextRefiner {
     // MARK: - Tidy-up
 
     /// Repairs the seams left by removals: duplicate separators, orphaned
-    /// commas, missing sentence capitalization.
-    static func tidy(_ tokens: [Token]) -> String {
+    /// commas, and (when enabled) missing sentence capitalization.
+    static func tidy(_ tokens: [Token], capitalize: Bool = true) -> String {
         var text = Tokenizer.join(tokens)
 
         // Collapse runs of spaces (but keep newlines).
@@ -205,7 +215,7 @@ public struct RulesRefiner: TextRefiner {
             of: #"^[\s,.]+"#, with: "", options: .regularExpression)
         text = text.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        return capitalizeSentenceStarts(text)
+        return capitalize ? capitalizeSentenceStarts(text) : text
     }
 
     /// Capitalizes the first letter of the text and of each sentence.

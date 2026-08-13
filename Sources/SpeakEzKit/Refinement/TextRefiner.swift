@@ -21,3 +21,27 @@ public enum RefinementLevel: String, Codable, CaseIterable, Sendable {
 public protocol TextRefiner: Sendable {
     func refine(_ text: String) async throws -> String
 }
+
+/// Which of the rule-based cleanup passes are enabled. Punctuation seam
+/// repair (orphaned commas, double spaces) is not an option: it is part of
+/// doing the enabled removals correctly, so it always runs.
+public struct RefinementOptions: Codable, Equatable, Sendable {
+    public var removeFillers: Bool
+    public var collapseStutters: Bool
+    public var applyVocabulary: Bool
+    public var fixCapitalization: Bool
+
+    public init(
+        removeFillers: Bool = true,
+        collapseStutters: Bool = true,
+        applyVocabulary: Bool = true,
+        fixCapitalization: Bool = true
+    ) {
+        self.removeFillers = removeFillers
+        self.collapseStutters = collapseStutters
+        self.applyVocabulary = applyVocabulary
+        self.fixCapitalization = fixCapitalization
+    }
+
+    public static let all = RefinementOptions()
+}

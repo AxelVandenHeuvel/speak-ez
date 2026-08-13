@@ -57,6 +57,54 @@ import Testing
     }
 }
 
+@Suite struct RefinementOptionsTests {
+    private let vocabulary = [VocabTerm(text: "tmux", aliases: ["tea mux"])]
+
+    private func refine(_ text: String, options: RefinementOptions) -> String {
+        RulesRefiner(vocabulary: vocabulary, options: options).refineSync(text)
+    }
+
+    @Test func fillersCanBeKept() {
+        let options = RefinementOptions(removeFillers: false)
+        #expect(refine("um the the build works", options: options)
+            == "Um the build works")
+    }
+
+    @Test func stuttersCanBeKept() {
+        let options = RefinementOptions(collapseStutters: false)
+        #expect(refine("um the the build works", options: options)
+            == "The the build works")
+    }
+
+    @Test func vocabularyCanBeSkipped() {
+        let options = RefinementOptions(applyVocabulary: false)
+        #expect(refine("um I opened tea mux", options: options)
+            == "I opened tea mux")
+    }
+
+    @Test func capitalizationCanBeSkipped() {
+        let options = RefinementOptions(fixCapitalization: false)
+        #expect(refine("um so it works. um it really works", options: options)
+            == "so it works. it really works")
+    }
+
+    @Test func seamRepairRunsRegardless() {
+        // Even with capitalization off, removing a filler must not leave
+        // orphaned commas or double spaces behind.
+        let options = RefinementOptions(fixCapitalization: false)
+        #expect(refine("I think, um, that works", options: options)
+            == "I think, that works")
+    }
+
+    @Test func everythingOffLeavesTextAlone() {
+        let options = RefinementOptions(
+            removeFillers: false, collapseStutters: false,
+            applyVocabulary: false, fixCapitalization: false)
+        #expect(refine("um the the tea mux thing", options: options)
+            == "um the the tea mux thing")
+    }
+}
+
 @Suite struct VocabularyCorrectorTests {
     private let corrector = VocabularyCorrector(terms: [
         VocabTerm(text: "tmux", aliases: ["tea mux"]),

@@ -28,6 +28,14 @@ final class AppSettings {
         }
     }
 
+    var refinementOptions: RefinementOptions {
+        didSet {
+            if let data = try? JSONEncoder().encode(refinementOptions) {
+                UserDefaults.standard.set(data, forKey: "refinementOptions")
+            }
+        }
+    }
+
     private init() {
         refinementLevel =
             UserDefaults.standard.string(forKey: "refinementLevel")
@@ -48,5 +56,8 @@ final class AppSettings {
         triggerMode =
             UserDefaults.standard.string(forKey: "triggerMode")
             .flatMap(TriggerInterpreter.Mode.init(rawValue:)) ?? .hold
+        refinementOptions =
+            UserDefaults.standard.data(forKey: "refinementOptions")
+            .flatMap { try? JSONDecoder().decode(RefinementOptions.self, from: $0) } ?? .all
     }
 }

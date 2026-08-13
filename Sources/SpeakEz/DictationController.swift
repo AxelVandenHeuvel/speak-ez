@@ -223,7 +223,9 @@ final class DictationController {
         let level = settings.refinementLevel
         if level != .off {
             let vocabulary = store.loadVocabulary()
-            let rules = RulesRefiner(lexicon: store.loadFillers(), vocabulary: vocabulary)
+            let rules = RulesRefiner(
+                lexicon: store.loadFillers(), vocabulary: vocabulary,
+                options: settings.refinementOptions)
             let ruleRefined = rules.refineSync(pendingTranscript)
             pendingTranscript = ruleRefined
 

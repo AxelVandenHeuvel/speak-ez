@@ -84,7 +84,7 @@ Things I am planning to build, roughly in order.
 Open an issue if one of these matters to you; it helps me prioritize.
 
 - [x] Dictation history in the menu bar: see what was heard vs what was typed, copy either
-- [ ] Granular cleanup toggles: filler removal, punctuation, and capitalization as independent switches
+- [x] Granular cleanup toggles: fillers, stutters, vocabulary, and capitalization as independent switches
 - [ ] URL scheme and CLI (`speakez://toggle`) for Raycast, Keyboard Maestro, and scripts
 - [ ] Per-app tone profiles: casual in Slack, formal in Mail, technical terms preserved in terminals and editors
 - [ ] Keyword boosting: feed your vocabulary into the speech model itself for better jargon recognition
