@@ -244,6 +244,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         triggerRoot.submenu = triggerMenu
         menu.addItem(triggerRoot)
 
+        menu.addItem(historyMenuItem())
+
         let addTermItem = NSMenuItem(
             title: "Add Vocabulary Term…", action: #selector(addVocabularyTerm),
             keyEquivalent: "")
@@ -271,6 +273,61 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(NSMenuItem(
             title: "Quit speakEZ", action: #selector(NSApplication.terminate(_:)),
             keyEquivalent: "q"))
+    }
+
+    /// The History submenu: last few dictations, each expandable to compare
+    /// what was heard with what was inserted, with copy actions for both.
+    private func historyMenuItem() -> NSMenuItem {
+        let records = HistoryStore.standard().load()
+        let historyMenu = NSMenu()
+
+        if records.isEmpty {
+            historyMenu.addItem(disabledItem("No dictations yet"))
+        }
+        for record in records.prefix(8) {
+            let entry = NSMenuItem(
+                title: truncated(record.inserted, to: 44), action: nil, keyEquivalent: "")
+            let detail = NSMenu()
+
+            let copyInserted = NSMenuItem(
+                title: "Copy Inserted Text", action: #selector(copyHistoryText(_:)),
+                keyEquivalent: "")
+            copyInserted.target = self
+            copyInserted.representedObject = record.inserted
+            detail.addItem(copyInserted)
+
+            let copyRaw = NSMenuItem(
+                title: "Copy Raw Transcript", action: #selector(copyHistoryText(_:)),
+                keyEquivalent: "")
+            copyRaw.target = self
+            copyRaw.representedObject = record.raw
+            detail.addItem(copyRaw)
+
+            detail.addItem(.separator())
+            detail.addItem(disabledItem("Heard: \(truncated(record.raw, to: 60))"))
+            if record.raw != record.inserted {
+                detail.addItem(disabledItem("Typed: \(truncated(record.inserted, to: 60))"))
+            }
+
+            entry.submenu = detail
+            historyMenu.addItem(entry)
+        }
+
+        if !records.isEmpty {
+            historyMenu.addItem(.separator())
+            let clear = NSMenuItem(
+                title: "Clear History", action: #selector(clearHistory), keyEquivalent: "")
+            clear.target = self
+            historyMenu.addItem(clear)
+        }
+
+        let root = NSMenuItem(title: "History", action: nil, keyEquivalent: "")
+        root.submenu = historyMenu
+        return root
+    }
+
+    private func truncated(_ text: String, to limit: Int) -> String {
+        text.count <= limit ? text : String(text.prefix(limit - 1)) + "…"
     }
 
     private var modelStatusTitle: String {
@@ -417,6 +474,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             ])
         }
         NSWorkspace.shared.open(store.vocabularyURL)
+    }
+
+    @objc private func copyHistoryText(_ sender: NSMenuItem) {
+        guard let text = sender.representedObject as? String else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+    }
+
+    @objc private func clearHistory() {
+        try? HistoryStore.standard().clear()
     }
 
     @objc private func editFillers() {

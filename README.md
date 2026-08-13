@@ -78,6 +78,19 @@ Those tools give you what you said; this one gives you what you meant to type, a
 If you want a transcription tool, use one of those.
 If you want dictation that does not need manual cleanup afterwards, that is this.
 
+## Roadmap
+
+Things I am planning to build, roughly in order.
+Open an issue if one of these matters to you; it helps me prioritize.
+
+- [x] Dictation history in the menu bar: see what was heard vs what was typed, copy either
+- [ ] Granular cleanup toggles: filler removal, punctuation, and capitalization as independent switches
+- [ ] URL scheme and CLI (`speakez://toggle`) for Raycast, Keyboard Maestro, and scripts
+- [ ] Per-app tone profiles: casual in Slack, formal in Mail, technical terms preserved in terminals and editors
+- [ ] Keyword boosting: feed your vocabulary into the speech model itself for better jargon recognition
+- [ ] Spoken self-correction: "meet at five, no wait, six" comes out as "Meet at six."
+- [ ] Local context awareness: cleanup can see a few hundred characters around your cursor so on-screen names and terms are spelled right; stays on-device like everything else
+
 ## Requirements
 
 - Apple Silicon Mac, macOS 14 or later.

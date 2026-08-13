@@ -22,6 +22,7 @@ final class DictationController {
 
     private let settings = AppSettings.shared
     private let store = VocabularyStore.standard()
+    private let history = HistoryStore.standard()
 
     private var interpreter = TriggerInterpreter()
     private var recordingStartedAt: Date?
@@ -29,6 +30,8 @@ final class DictationController {
     private var maxDurationTimer: Timer?
     private var pipelineTask: Task<Void, Never>?
     private var pendingTranscript: String = ""
+    /// What the speech model heard, before any refinement, for the history.
+    private var pendingRawTranscript: String = ""
     private var modelReady = false
 
     /// Capture continues this long after release, because people let go of
@@ -207,6 +210,7 @@ final class DictationController {
                 return
             }
             pendingTranscript = text
+            pendingRawTranscript = text
             handle(.transcriptReady)
         } catch {
             guard !Task.isCancelled else { return }
@@ -263,6 +267,8 @@ final class DictationController {
         overlay.hide()
         switch outcome {
         case .inserted:
+            try? history.append(
+                DictationRecord(raw: pendingRawTranscript, inserted: text, date: Date()))
             handle(.insertionFinished)
         case .blockedBySecureInput:
             machine.handle(.insertionFinished)
