@@ -78,6 +78,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return image
     }()
 
+    /// speakez://toggle, start, stop, cancel: dictation for Raycast,
+    /// Shortcuts, Stream Decks, and scripts.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls {
+            guard let command = ExternalCommand(url: url) else { continue }
+            controller.handleExternal(command)
+        }
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         setIdleIcon()

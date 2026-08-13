@@ -41,6 +41,17 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 	<string>14.0</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>dev.speakez.SpeakEz</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>speakez</string>
+			</array>
+		</dict>
+	</array>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>speakEZ records your voice while the trigger key is held so it can transcribe it into text. Audio never leaves this Mac.</string>
 	<key>NSHumanReadableCopyright</key>

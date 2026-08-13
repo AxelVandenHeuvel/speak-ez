@@ -1,10 +1,33 @@
+import AppKit
 import FluidAudio
 import Foundation
+import SpeakEzKit
 
 /// Headless self-test: `SpeakEz --transcribe file.wav` prints the transcript
 /// and timing to stdout and exits. Used by the integration test and for
 /// verifying the speech stack without launching the UI.
 enum TranscribeCLI {
+    /// CLI shorthands for the URL scheme: `speakEZ --toggle` etc. delivers
+    /// the command to the running app (launching it if needed) and exits.
+    static func runCommandIfRequested() {
+        let flags: [String: ExternalCommand] = [
+            "--toggle": .toggle, "--start": .start, "--stop": .stop, "--cancel": .cancel,
+        ]
+        for (flag, command) in flags where CommandLine.arguments.contains(flag) {
+            let url = URL(string: "speakez://\(command.rawValue)")!
+            let configuration = NSWorkspace.OpenConfiguration()
+            NSWorkspace.shared.open(url, configuration: configuration) { _, error in
+                if let error {
+                    FileHandle.standardError.write(
+                        "could not deliver \(command.rawValue): \(error)\n".data(using: .utf8)!)
+                    exit(1)
+                }
+                exit(0)
+            }
+            RunLoop.main.run()
+        }
+    }
+
     /// Headless AI refinement check: `speakEZ --refine "some text"` prints
     /// the polished text, or the reason AI mode is unavailable.
     static func runRefineIfRequested() {

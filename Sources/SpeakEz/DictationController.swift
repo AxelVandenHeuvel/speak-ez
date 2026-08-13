@@ -251,6 +251,35 @@ final class DictationController {
         interpreter.mode = mode
     }
 
+    /// Handles a command arriving from outside (speakez:// URL or CLI).
+    /// External recordings behave like tap-to-toggle: nothing is held, so
+    /// they end via another command, the trigger key in toggle mode, or Esc.
+    func handleExternal(_ command: ExternalCommand) {
+        switch command {
+        case .toggle:
+            machine.state == .recording ? externalStop() : externalStart()
+        case .start:
+            externalStart()
+        case .stop:
+            externalStop()
+        case .cancel:
+            if machine.state != .idle {
+                handle(.escapePressed)
+            }
+        }
+    }
+
+    private func externalStart() {
+        guard machine.state == .idle else { return }
+        handle(.triggerPressed)
+    }
+
+    private func externalStop() {
+        guard machine.state == .recording else { return }
+        let elapsed = recordingStartedAt.map { -$0.timeIntervalSinceNow } ?? 1
+        handle(.triggerReleased(heldFor: elapsed))
+    }
+
     /// Shows a prompt and reports the next key the user presses.
     /// The completion receives nil if the user cancelled with Esc.
     func captureTrigger(completion: @escaping (TriggerSpec?) -> Void) {

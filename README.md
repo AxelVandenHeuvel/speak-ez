@@ -69,6 +69,20 @@ You can change it in the menu: presets, or press any key or two-key combo (like 
 There is also a tap-to-toggle mode if you would rather not hold the key while talking.
 Esc cancels a recording, and recordings cap at five minutes.
 
+## Scripting
+
+Anything that can open a URL can drive dictation, so you can wire it into Raycast, Apple Shortcuts, Keyboard Maestro, a Stream Deck button, or a foot pedal:
+
+```sh
+open "speakez://toggle"   # start recording; stop and insert if already recording
+open "speakez://start"
+open "speakez://stop"
+open "speakez://cancel"
+```
+
+The binary also takes the same commands as flags (`/Applications/speakEZ.app/Contents/MacOS/speakEZ --toggle`).
+Recordings started this way behave like tap-to-toggle: end them with another command, the trigger key in toggle mode, or Esc.
+
 ## Compared to similar projects
 
 [OpenSuperWhisper](https://github.com/Starmel/OpenSuperWhisper), [VoiceInk](https://github.com/Beingpax/VoiceInk), and [Handy](https://github.com/cjpais/Handy) are all good local transcription apps, and some do things this one does not: more engines, more languages, transcribing audio files.
@@ -85,7 +99,7 @@ Open an issue if one of these matters to you; it helps me prioritize.
 
 - [x] Dictation history in the menu bar: see what was heard vs what was typed, copy either
 - [x] Granular cleanup toggles: fillers, stutters, vocabulary, and capitalization as independent switches
-- [ ] URL scheme and CLI (`speakez://toggle`) for Raycast, Keyboard Maestro, and scripts
+- [x] URL scheme and CLI (`speakez://toggle`) for Raycast, Keyboard Maestro, and scripts
 - [ ] Per-app tone profiles: casual in Slack, formal in Mail, technical terms preserved in terminals and editors
 - [ ] Keyword boosting: feed your vocabulary into the speech model itself for better jargon recognition
 - [ ] Spoken self-correction: "meet at five, no wait, six" comes out as "Meet at six."

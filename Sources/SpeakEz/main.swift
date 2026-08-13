@@ -2,6 +2,7 @@ import AppKit
 
 TranscribeCLI.runIfRequested()
 TranscribeCLI.runRefineIfRequested()
+TranscribeCLI.runCommandIfRequested()
 
 // NSLog goes to stderr; keep a copy on disk so problems are diagnosable
 // regardless of how the app was launched (unified log hides our entries).
